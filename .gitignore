@@ -1,0 +1,21 @@
+# Local runtime, credentials and recordings must never be committed.
+data/
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+*.mp4
+*.ps
+*.partial
+*.zip
+*.lnk
+*.dll
+*.exe
+*.png
+*.jpg
+*.csv
+config.json
+*credentials*
+*password*
+cache/
