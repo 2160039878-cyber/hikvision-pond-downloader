@@ -1,0 +1,28 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {run,hash} from '../media.mjs';
+const root=path.dirname(fileURLToPath(import.meta.url)),repo=path.dirname(root);
+const target=path.resolve(process.argv[2]||path.join(repo,'dist','HikvisionAssistant-2.0-preview'));
+const ffmpegDir=process.argv[3];
+if(!ffmpegDir)throw Error('Provide the verified FFmpeg build directory as the third argument');
+try{await fs.access(target);throw Error('Target exists; choose a new directory to preserve it')}catch(e){if(e.code!=='ENOENT')throw e}
+await fs.mkdir(target,{recursive:true});
+const program=path.join(target,'程序');await fs.cp(path.join(root,'node_modules','electron','dist'),program,{recursive:true});
+await fs.rename(path.join(program,'electron.exe'),path.join(program,'HikvisionAssistant.exe'));
+const appDir=path.join(program,'resources','app');await fs.mkdir(path.join(appDir,'desktop'),{recursive:true});
+for(const name of ['core.mjs','media.mjs','download-worker.ps1'])await fs.copyFile(path.join(repo,name),path.join(appDir,name));
+for(const name of ['main.cjs','preload.cjs','model.mjs','adapter.mjs','service.mjs','renderer.js','index.html','style.css','sdk-common.ps1','probe-worker.ps1'])await fs.copyFile(path.join(root,name),path.join(appDir,'desktop',name));
+await fs.writeFile(path.join(appDir,'package.json'),JSON.stringify({name:'hikvision-recording-assistant',productName:'海康录像下载助手',version:'2.0.0-preview.1',main:'desktop/main.cjs',type:'module'}));
+const bin=path.join(program,'resources','bin');await fs.mkdir(bin,{recursive:true});
+for(const name of ['ffmpeg.exe','ffprobe.exe'])await fs.copyFile(path.join(ffmpegDir,'bin',name),path.join(bin,name));
+const licenses=path.join(target,'许可说明');await fs.mkdir(licenses);
+for(const name of ['LICENSE','README.txt'])await fs.copyFile(path.join(ffmpegDir,name),path.join(licenses,'FFmpeg-'+name));
+await fs.copyFile(path.join(root,'THIRD_PARTY.md'),path.join(licenses,'组件与来源.md'));
+await fs.copyFile(path.join(root,'README.md'),path.join(target,'使用说明.md'));
+await fs.copyFile(path.join(root,'ACCEPTANCE.md'),path.join(target,'验收记录.md'));
+const compiler=path.join(process.env.SystemRoot,'Microsoft.NET','Framework64','v4.0.30319','csc.exe');
+const result=await run(compiler,['/nologo','/target:winexe','/reference:System.Windows.Forms.dll',`/out:${path.join(target,'开始.exe')}`,path.join(root,'Launcher.cs')]);if(result.code)throw Error('Launcher compilation failed: '+result.stdout);
+const files=[];async function walk(dir){for(const e of await fs.readdir(dir,{withFileTypes:true})){const full=path.join(dir,e.name);if(e.isDirectory())await walk(full);else files.push({file:path.relative(target,full).replaceAll('\\','/'),bytes:(await fs.stat(full)).size,sha256:await hash(full)})}}await walk(target);
+await fs.writeFile(path.join(target,'文件校验.json'),JSON.stringify({release:'2.0.0-preview.1',sdkIncluded:false,signed:false,files},null,2));
+console.log(JSON.stringify({target,files:files.length,sdkIncluded:false}));

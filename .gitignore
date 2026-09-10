@@ -19,3 +19,7 @@ config.json
 *credentials*
 *password*
 cache/
+dist/
+desktop/bin/
+desktop/sdk/
+*.enc.json

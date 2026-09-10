@@ -50,6 +50,8 @@ test('真实 FFmpeg 快速校验、损坏检测、复制哈希、中文路径与
     const target = path.join(temp, '中文 文件夹', '录像.mp4');
     const copied = await deliver(source, target, 3); assert.equal(copied.sha256, await hash(source));
     assert.equal((await deliver(source, target, 3)).sha256, copied.sha256);
+    const longTarget = path.join(temp, 'v'.repeat(230 - temp.length - 5) + '.mp4');
+    assert.equal((await deliver(source, longTarget, 3)).sha256, copied.sha256);
     await assert.rejects(deliver(source, target, 3, undefined, '0'.repeat(64)), /哈希/);
     assert.equal(await hash(target), copied.sha256);
     await assert.rejects(deliver(source, path.join(temp, 'mismatch.mp4'), 3, undefined, '0'.repeat(64)), /SHA256/);
@@ -65,6 +67,14 @@ test('真实 FFmpeg 快速校验、损坏检测、复制哈希、中文路径与
     } });
     assert.equal(converted.videoCodec, 'h264');
     assert.deepEqual(encoders, ['h264_qsv', 'libx264']);
+    const validationFallback = [];
+    const afterInvalidHardware = await transcode(raw, path.join(temp, 'invalid-hardware.mp4'), 3, undefined, { run: async (exe, args, opts) => {
+      const encoder = args[args.indexOf('-c:v') + 1]; validationFallback.push(encoder);
+      if (encoder === 'h264_qsv') { await fs.writeFile(args.at(-1), 'invalid-successful-hardware-output'); return { code: 0, stderr: '' }; }
+      return run(exe, args, opts);
+    } });
+    assert.equal(afterInvalidHardware.videoCodec, 'h264');
+    assert.deepEqual(validationFallback, ['h264_qsv', 'libx264']);
   } finally { await removeTestDirectory(temp); }
 });
 

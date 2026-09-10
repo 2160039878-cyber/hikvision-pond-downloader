@@ -52,7 +52,10 @@ export async function transcode(source, destination, seconds, signal, executable
       ...(encoder === 'h264_qsv' ? ['-global_quality', '28', '-pix_fmt', 'nv12'] : ['-preset', 'veryfast', '-crf', '28', '-pix_fmt', 'yuv420p']),
       '-c:a', 'aac', '-b:a', '64k', '-movflags', '+faststart', '-f', 'mp4', destination];
     const r = await (executables.run || run)(executables.ffmpeg || 'ffmpeg', args, { signal, timeout: Math.max(900000, seconds * 10000) });
-    if (r.code === 0) { const result = await verify(destination, seconds, signal, executables); return { ...result, encoder }; }
+    if (r.code === 0) {
+      try { const result = await verify(destination, seconds, signal, executables); return { ...result, encoder }; }
+      catch (e) { if (signal?.aborted || encoder === 'libx264') throw e; }
+    }
     if (signal?.aborted) throw Error('已取消');
   }
   throw Error('硬件和软件转码均失败；原始文件已保留');
@@ -65,7 +68,7 @@ export async function deliver(source, target, seconds, signal, expectedHash, exe
     if (await hash(target, signal) !== sourceHash) throw Error('已有目标文件哈希不符；未覆盖，请更换输出目录或处理冲突文件');
     return { ...result, sha256: sourceHash, size: (await fs.stat(target)).size };
   } catch (e) { if (e.code !== 'ENOENT') throw e; }
-  const temp = `${target}.${crypto.randomUUID()}.copying`;
+  const temp = path.join(path.dirname(target), `.copy-${crypto.randomUUID()}.mp4`);
   await fs.mkdir(path.dirname(target), { recursive: true });
   try {
     await pipeline(createReadStream(source), createWriteStream(temp, { flags: 'wx' }), { signal });
